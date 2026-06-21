@@ -1,0 +1,668 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Nextn Equipments - A4 Quotation System</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+    <style>
+        /* --- UI Styling --- */
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #525659; margin: 0; padding: 0; display: flex; height: 100vh; overflow: hidden; }
+        .controls { width: 450px; background: white; padding: 20px; overflow-y: auto; box-shadow: 2px 0 10px rgba(0,0,0,0.2); z-index: 10; }
+        .preview-container { flex: 1; overflow-y: auto; padding: 30px; display: flex; flex-direction: column; align-items: center; gap: 20px; }
+        
+        .controls h2 { margin-top: 0; color: #333; font-size: 1.2rem; border-bottom: 2px solid #c00000; padding-bottom: 10px; }
+        .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 15px; }
+        .form-group { display: flex; flex-direction: column; margin-bottom: 10px; }
+        .form-group label { font-size: 0.85rem; font-weight: bold; margin-bottom: 4px; color: #555; }
+        .form-group input, .form-group textarea, .form-group select { padding: 8px; border: 1px solid #ccc; border-radius: 4px; font-family: inherit; }
+        
+        .item-card { border: 1px solid #ddd; padding: 10px; margin-bottom: 10px; background: #f8f9fa; border-radius: 4px; }
+        .item-card input, .item-card textarea { width: 100%; box-sizing: border-box; margin-bottom: 5px; padding: 5px; border: 1px solid #ccc; }
+        
+        .btn { padding: 10px; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; color: white; width: 100%; margin-bottom: 10px; text-align: center; transition: 0.3s; }
+        .btn-add { background: #17a2b8; }
+        .btn-pdf { background: #c00000; }
+        .btn-pdf:hover { background: #a00000; }
+        .btn-print { background: #28a745; }
+        .btn-search { background: #0056b3; }
+        .btn-db { background: #28a745; margin-bottom: 10px; font-weight: bold; font-size: 0.75rem; padding: 8px; }
+        .btn-client { background: #e0a800; margin-bottom: 10px; font-weight: bold; font-size: 0.75rem; padding: 8px; color: #000; }
+        .btn-logo { background: #6c757d; margin-bottom: 15px; font-weight: bold; font-size: 0.75rem; padding: 8px; }
+        .btn-remove { background: #dc3545; padding: 5px; font-size: 0.8rem; }
+        .custom-file-upload { display: flex; align-items: center; justify-content: center; cursor: pointer; border-radius: 4px; box-sizing: border-box; text-align: center; }
+        input[type="file"] { display: none; }
+
+        /* --- STRICT A4 DOCUMENT STYLING --- */
+        #printArea { display: flex; flex-direction: column; gap: 20px; align-items: center; width: 100%; }
+        
+        /* Each individual page box */
+        .preview-page { width: 210mm; min-height: 297mm; background: white; padding: 15mm; box-sizing: border-box; box-shadow: 0 5px 15px rgba(0,0,0,0.3); position: relative; }
+        .page-break { page-break-after: always; }
+        
+        .header { display: flex; justify-content: space-between; border-bottom: 2px solid #000; padding-bottom: 10px; margin-bottom: 15px; }
+        .doc-title { text-align: right; }
+        .doc-title h2 { margin: 0; color: #333; letter-spacing: 1px; }
+        
+        .preview-table { width: 100%; border-collapse: collapse; margin: 15px 0; font-size: 0.9rem; table-layout: fixed; }
+        .preview-table th, .preview-table td { border: 1px solid #000; padding: 6px; vertical-align: top; word-wrap: break-word; }
+        .preview-table th { background: #f2f2f2; text-align: center; font-weight: bold; }
+        
+        .text-right { text-align: right; }
+        .text-center { text-align: center; }
+        .text-bold { font-weight: bold; }
+        
+        .footer-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; font-size: 0.85rem; margin-top: 20px; }
+        .item-details-flex { display: flex; justify-content: space-between; align-items: flex-start; }
+        .sku-img { max-width: 70px; max-height: 70px; display: block; margin-left: 10px; border: 1px solid #ccc; object-fit: contain; }
+        .company-logo { max-height: 80px; margin-bottom: 10px; object-fit: contain; display: none; }
+        
+        /* Search Modal */
+        .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 100; justify-content: center; align-items: center; }
+        .modal-content { background: white; padding: 20px; border-radius: 8px; width: 80%; max-width: 800px; max-height: 80vh; overflow-y: auto; }
+        .modal-header { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #ccc; padding-bottom: 10px; margin-bottom: 15px; }
+        .close-btn { cursor: pointer; font-size: 1.5rem; font-weight: bold; color: #dc3545; }
+        .search-results table { width: 100%; border-collapse: collapse; margin-top: 15px; }
+        .search-results th, .search-results td { border: 1px solid #ccc; padding: 8px; text-align: left; }
+        .search-results th { background: #f4f4f4; }
+
+        @media print {
+            @page { size: A4 portrait; margin: 0; }
+            body { background: white; display: block; height: auto; overflow: visible; }
+            .controls, .modal { display: none !important; }
+            .preview-container { padding: 0; display: block; overflow: visible; gap: 0; }
+            #printArea { gap: 0; display: block; }
+            .preview-page { width: 210mm; height: 297mm; padding: 15mm; margin: 0; box-shadow: none; page-break-after: always; }
+        }
+    </style>
+</head>
+<body>
+
+<datalist id="db-skus"></datalist>
+<datalist id="db-clients"></datalist>
+
+<div class="controls">
+
+    <h2>System Settings</h2>
+    <div class="form-group">
+        <label style="color: #c00000;">Google Apps Script URL (For Database)</label>
+        <input type="text" id="scriptUrl" placeholder="Paste Web App URL here..." onchange="saveScriptUrl()">
+    </div>
+    <div style="display: flex; gap: 5px;">
+        <label class="custom-file-upload btn-logo" id="logoUploadBox" style="flex: 1;">
+            <input type="file" accept="image/*" onchange="uploadLogo(event)">
+            🏢 Set Logo
+        </label>
+        <label class="custom-file-upload btn-db" style="flex: 1;">
+            <input type="file" accept=".csv" onchange="loadProductCSV(event)">
+            📦 Product DB
+        </label>
+        <label class="custom-file-upload btn-client" style="flex: 1;">
+            <input type="file" accept=".csv" onchange="loadClientCSV(event)">
+            👥 Party DB
+        </label>
+    </div>
+    
+    <button class="btn btn-search" onclick="openSearch()">🔍 Search Past Quotations</button>
+
+    <h2>Quotation Details</h2>
+    <div class="form-grid">
+        <div class="form-group" style="grid-column: span 2;">
+            <label>Quotation No.</label>
+            <input type="text" id="refNo" oninput="updatePreview()" style="background: #e9ecef; font-weight: bold;" readonly>
+        </div>
+        <div class="form-group" style="grid-column: span 2;">
+            <label>Date</label>
+            <input type="date" id="dateInput" onchange="updatePreview()">
+        </div>
+    </div>
+
+    <div class="form-grid" style="background: #e9ecef; padding: 10px; border-radius: 4px; margin-bottom: 15px;">
+        <div class="form-group" style="margin-bottom: 0;">
+            <label>Discount?</label>
+            <select id="hasDiscount" onchange="updatePreview()">
+                <option value="No">No</option>
+                <option value="Yes">Yes</option>
+            </select>
+        </div>
+        <div class="form-group" style="margin-bottom: 0;">
+            <label>Discount (%)</label>
+            <input type="number" id="discountPct" value="0" placeholder="%" oninput="updatePreview()">
+        </div>
+    </div>
+
+    <h2>Client / Party Info</h2>
+    <div class="form-group">
+        <label>Party Name (Type to search DB)</label>
+        <input type="text" id="cName" list="db-clients" placeholder="Client Company Name" oninput="handleClientInput(this)">
+    </div>
+    <div class="form-group">
+        <label>Contact Person</label>
+        <input type="text" id="cPerson" value="" placeholder="Contact Person Name" oninput="updatePreview()">
+    </div>
+    <div class="form-group">
+        <label>Client GST No.</label>
+        <input type="text" id="cGst" value="" placeholder="e.g. 03AABCU9603R1ZX" oninput="updatePreview()">
+    </div>
+    <div class="form-group">
+        <label>Address</label>
+        <textarea id="cAddress" rows="3" placeholder="Enter full address here..." oninput="updatePreview()"></textarea>
+    </div>
+    <div class="form-group">
+        <label>Phone</label>
+        <input type="text" id="cPhone" value="" placeholder="+91 XXXXX XXXXX" oninput="updatePreview()">
+    </div>
+
+    <h2>Items</h2>
+    <div id="itemGrid"></div>
+    <button class="btn btn-add" onclick="addRow()">+ Add New Item</button>
+
+    <hr style="margin: 20px 0; border: 0; border-top: 1px solid #ddd;">
+    <button class="btn btn-pdf" id="pdfBtn" onclick="generatePDF()">⬇ Download PDF & Save to Sheets</button>
+</div>
+
+<div class="preview-container" id="previewContainer">
+    <div id="printArea">
+        </div>
+</div>
+
+<div class="modal" id="searchModal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h2 style="margin:0;">Search Quotation Database</h2>
+            <span class="close-btn" onclick="closeSearch()">×</span>
+        </div>
+        <div style="display:flex; gap:10px;">
+            <input type="text" id="searchInput" placeholder="Search by ID or Client Name..." style="flex:1; padding:10px; border:1px solid #ccc; border-radius:4px;">
+            <button class="btn btn-search" onclick="performSearch()" style="margin:0;">Search</button>
+        </div>
+        <div class="search-results" id="searchResultsArea"></div>
+    </div>
+</div>
+
+<script>
+    const formatINR = (amt) => amt.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    let rowCount = 0;
+    
+    let productDB = {}; 
+    let clientDB = {}; 
+    let itemImages = {}; 
+    let localImages = {}; 
+
+    // --- GOOGLE SHEETS & SETTINGS ---
+    function saveScriptUrl() {
+        localStorage.setItem('qt_google_script_url', document.getElementById('scriptUrl').value);
+        fetchLiveID(); // Automatically fetch the next sequence ID when a new URL is saved
+    }
+    document.getElementById('scriptUrl').value = localStorage.getItem('qt_google_script_url') || "";
+
+    // --- LIVE SEQUENTIAL ID GENERATOR (Backend Sync) ---
+    async function fetchLiveID() {
+        const url = document.getElementById('scriptUrl').value;
+        if (!url) return;
+        
+        try {
+            const response = await fetch(url + "?action=get_id");
+            const data = await response.json();
+            document.getElementById('refNo').value = data.nextId;
+            updatePreview();
+        } catch (error) {
+            console.error("Error fetching live ID:", error);
+            document.getElementById('refNo').value = "Error fetching ID";
+        }
+    }
+
+    // Initial Setup Tasks
+    document.getElementById('dateInput').value = new Date().toISOString().split('T')[0];
+    if (document.getElementById('scriptUrl').value) {
+        fetchLiveID();
+    } else {
+        document.getElementById('refNo').value = "Pending... (Set Settings URL)";
+    }
+
+    // --- SECURE LOGO SYSTEM ---
+    function uploadLogo(event) {
+        const file = event.target.files[0];
+        if (file) {
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                localStorage.setItem('companyLogoMemory', e.target.result);
+                updatePreview();
+            };
+            reader.readAsDataURL(file);
+        }
+    }
+
+    // --- CSV PARSERS (Products & Clients) ---
+    function parseCSVLine(text) {
+        let rows = []; let row = []; let inQuotes = false; let val = '';
+        for (let i = 0; i < text.length; i++) {
+            let c = text[i]; let nc = text[i+1];
+            if (c === '"' && inQuotes && nc === '"') { val += '"'; i++; }
+            else if (c === '"') { inQuotes = !inQuotes; }
+            else if (c === ',' && !inQuotes) { row.push(val.trim()); val = ''; }
+            else if ((c === '\n' || c === '\r') && !inQuotes) { 
+                if (c === '\r' && nc === '\n') i++; 
+                row.push(val.trim()); if (row.join('').trim() !== '') rows.push(row); 
+                row = []; val = ''; 
+            } else { val += c; }
+        }
+        if (val || row.length > 0) { row.push(val.trim()); if (row.join('').trim() !== '') rows.push(row); }
+        return rows;
+    }
+
+    function loadProductCSV(event) {
+        const file = event.target.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            const rows = parseCSVLine(e.target.result);
+            productDB = {};
+            const datalist = document.getElementById('db-skus');
+            datalist.innerHTML = '';
+            let count = 0;
+            for (let i = 1; i < rows.length; i++) {
+                let r = rows[i];
+                if (r.length >= 4 && r[0]) {
+                    productDB[r[0]] = { title: r[1]||"", desc: r[2]||"", price: parseFloat(r[3])||0, img: r[4]||(r[0]+".jpg") };
+                    let opt = document.createElement('option'); opt.value = r[0]; datalist.appendChild(opt);
+                    count++;
+                }
+            }
+            alert(`Product Database loaded! (${count} items)`);
+            event.target.value = ''; 
+        };
+        reader.readAsText(file);
+    }
+
+    function loadClientCSV(event) {
+        const file = event.target.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            const rows = parseCSVLine(e.target.result);
+            clientDB = {};
+            const datalist = document.getElementById('db-clients');
+            datalist.innerHTML = '';
+            let count = 0;
+            for (let i = 1; i < rows.length; i++) {
+                let r = rows[i];
+                if (r.length >= 1 && r[0]) {
+                    clientDB[r[0]] = { person: r[1]||"", gst: r[2]||"", addr: r[3]||"", phone: r[4]||"" };
+                    let opt = document.createElement('option'); opt.value = r[0]; datalist.appendChild(opt);
+                    count++;
+                }
+            }
+            alert(`Party Database loaded! (${count} clients)`);
+            event.target.value = '';
+        };
+        reader.readAsText(file);
+    }
+
+    function handleClientInput(input) {
+        const name = input.value.trim();
+        if (clientDB[name]) {
+            document.getElementById('cPerson').value = clientDB[name].person;
+            document.getElementById('cGst').value = clientDB[name].gst;
+            document.getElementById('cAddress').value = clientDB[name].addr;
+            document.getElementById('cPhone').value = clientDB[name].phone;
+        }
+        updatePreview();
+    }
+
+    // --- ROW LOGIC ---
+    function addRow() {
+        rowCount++;
+        const id = rowCount;
+        localImages[id] = ""; 
+        const div = document.createElement('div');
+        div.className = 'item-card';
+        div.id = `row-${id}`;
+        div.innerHTML = `
+            <div style="display: flex; gap: 5px; margin-bottom: 5px;">
+                <input type="text" class="in-sku" list="db-skus" placeholder="SKU" style="flex: 1;" oninput="handleSKUInput(this, ${id})">
+                <input type="text" class="in-title" placeholder="Item Header" style="flex: 2;" oninput="updatePreview()">
+                <button class="btn-remove" onclick="removeRow(${id})">X</button>
+            </div>
+            <textarea class="in-det" rows="3" placeholder="Item Details..." oninput="updatePreview()"></textarea>
+            <div style="display: flex; gap: 5px; margin-bottom: 5px;">
+                <input type="number" class="in-price" placeholder="Price" oninput="updatePreview()">
+                <input type="number" class="in-qty" placeholder="Qty" oninput="updatePreview()">
+            </div>
+            <label class="custom-file-upload btn-logo">
+                <input type="file" accept="image/*" onchange="handleItemImageUpload(event, ${id})">
+                📷 Upload/Override Image
+            </label>
+        `;
+        document.getElementById('itemGrid').appendChild(div);
+        updatePreview();
+    }
+    
+    function removeRow(id) { 
+        document.getElementById(`row-${id}`).remove(); 
+        delete itemImages[id]; 
+        delete localImages[id]; 
+        updatePreview(); 
+    }
+    
+    function handleSKUInput(input, id) {
+        const sku = input.value.trim();
+        const row = document.getElementById(`row-${id}`);
+        if (productDB[sku]) {
+            row.querySelector('.in-title').value = productDB[sku].title;
+            row.querySelector('.in-det').value = productDB[sku].desc;
+            row.querySelector('.in-price').value = productDB[sku].price;
+            localImages[id] = productDB[sku].img;
+        } else {
+            localImages[id] = sku ? sku + ".jpg" : ""; 
+        }
+        updatePreview();
+    }
+    
+    function handleItemImageUpload(event, id) {
+        const file = event.target.files[0];
+        if (file) {
+            const reader = new FileReader();
+            reader.onload = function(e) { itemImages[id] = e.target.result; updatePreview(); };
+            reader.readAsDataURL(file);
+        }
+    }
+
+    // --- MULTI-PAGE ENGINE & CALCULATION ---
+    let finalSubTotal = 0; let finalGst = 0; let finalGrandTotal = 0;
+
+    function updatePreview() {
+        // Gather Client Inputs
+        const cName = document.getElementById('cName').value;
+        const cPerson = document.getElementById('cPerson').value;
+        const cAddress = document.getElementById('cAddress').value;
+        const cPhone = document.getElementById('cPhone').value.trim();
+        const cGst = document.getElementById('cGst').value.trim();
+
+        // Gather Header Inputs
+        const d = new Date(document.getElementById('dateInput').value);
+        const dateStr = `${String(d.getDate()).padStart(2,'0')}-${String(d.getMonth()+1).padStart(2,'0')}-${d.getFullYear()}`;
+        const refStr = document.getElementById('refNo').value;
+
+        // Gather Logo
+        const savedLogo = localStorage.getItem('companyLogoMemory');
+        const logoHtml = savedLogo ? `<img src="${savedLogo}" class="company-logo" style="display: block;">` : 
+            `<div id="fallbackLogoText"><h1 style="color: #c00000; margin: 0; font-size: 24px;">Nextn</h1><h5 style="color: #555; margin: 0 0 10px 0;">SHEET METAL SOLUTION</h5></div>`;
+
+        // Gather & Filter Items
+        let subTotal = 0;
+        let validItems = [];
+        document.querySelectorAll('.item-card').forEach((row) => {
+            const id = row.id.split('-')[1];
+            const sku = row.querySelector('.in-sku').value.trim();
+            const title = row.querySelector('.in-title').value.trim();
+            const det = row.querySelector('.in-det').value.replace(/\n/g, '<br>');
+            const price = parseFloat(row.querySelector('.in-price').value) || 0;
+            const qty = parseFloat(row.querySelector('.in-qty').value) || 0;
+            const total = price * qty;
+            
+            let finalImgTag = itemImages[id] ? `<img src="${itemImages[id]}" class="sku-img">` : (localImages[id] ? `<img src="${localImages[id]}" class="sku-img" onerror="this.style.display='none'">` : '');
+
+            if(sku || title || det || total > 0) {
+                validItems.push({ sku, title, det, price, qty, total, finalImgTag });
+                subTotal += total;
+            }
+        });
+
+        // Calculations
+        const hasDiscount = document.getElementById('hasDiscount').value === 'Yes';
+        const discountPct = parseFloat(document.getElementById('discountPct').value) || 0;
+        let discountAmt = (hasDiscount && discountPct > 0) ? subTotal * (discountPct / 100) : 0;
+        const taxableValue = subTotal - discountAmt;
+        const gst = taxableValue * 0.18;
+        const grandTotal = taxableValue + gst;
+
+        finalSubTotal = subTotal; finalGst = gst; finalGrandTotal = grandTotal;
+
+        // Paging Logic (Strict 5 Items per Page)
+        const ITEMS_PER_PAGE = 5;
+        let chunks = [];
+        if (validItems.length === 0) {
+            chunks.push([]); 
+        } else {
+            for (let i = 0; i < validItems.length; i += ITEMS_PER_PAGE) {
+                chunks.push(validItems.slice(i, i + ITEMS_PER_PAGE));
+            }
+        }
+
+        const totalPages = chunks.length;
+        let printAreaHtml = '';
+
+        chunks.forEach((chunk, pageIndex) => {
+            const isLastPage = (pageIndex === totalPages - 1);
+            const startIndex = pageIndex * ITEMS_PER_PAGE;
+            const pageBreakClass = isLastPage ? '' : 'page-break';
+
+            // Generate Table Rows for this chunk
+            let rowsHtml = '';
+            chunk.forEach((item, idx) => {
+                const titleBlock = item.title ? `<strong style="color: #0056b3; text-transform: uppercase;">${item.title}</strong><br>` : '';
+                const skuBlock = item.sku ? `<span style="font-size: 0.85em; color: #555;">SKU: ${item.sku}</span><br>` : '';
+
+                rowsHtml += `
+                    <tr>
+                        <td class="text-center" width="5%">${startIndex + idx + 1}</td>
+                        <td width="45%"><div class="item-details-flex"><div>${titleBlock}${skuBlock}<div style="font-size: 0.9em; margin-top: 5px;">${item.det}</div></div><div>${item.finalImgTag}</div></div></td>
+                        <td class="text-right" width="15%">${item.price > 0 ? formatINR(item.price) : ''}</td>
+                        <td class="text-center" width="10%">${item.qty > 0 ? item.qty : ''}</td>
+                        <td class="text-right" width="25%">${item.total > 0 ? formatINR(item.total) : ''}</td>
+                    </tr>`;
+            });
+
+            // Generate Totals and Footer ONLY for the Last Page
+            let tfootHtml = '';
+            let footerGridHtml = '';
+
+            if (isLastPage) {
+                tfootHtml += `<tr><td colspan="4" class="text-right text-bold">SUBTOTAL</td><td class="text-right text-bold">${formatINR(subTotal)}</td></tr>`;
+                if (discountAmt > 0) {
+                    tfootHtml += `<tr><td colspan="4" class="text-right text-bold" style="color: #c00000;">DISCOUNT (${discountPct}%)</td><td class="text-right text-bold" style="color: #c00000;">- ${formatINR(discountAmt)}</td></tr>
+                    <tr><td colspan="4" class="text-right text-bold">TAXABLE VALUE</td><td class="text-right text-bold">${formatINR(taxableValue)}</td></tr>`;
+                }
+                tfootHtml += `<tr><td colspan="4" class="text-right text-bold">GST 18%</td><td class="text-right text-bold">${formatINR(gst)}</td></tr>
+                <tr><td colspan="4" class="text-right text-bold" style="font-size: 1.1rem;">TOTAL AMOUNT</td><td class="text-right text-bold" style="font-size: 1.1rem;">${formatINR(grandTotal)}</td></tr>`;
+
+                footerGridHtml = `
+                    <div class="footer-grid">
+                        <div>
+                            <div class="text-bold" style="text-decoration: underline;">Terms & Conditions</div>
+                            <ul style="margin: 5px 0; padding-left: 15px; color: #444;">
+                                <li>Price: Ex. factory</li>
+                                <li>GST: 18% Will be extra on basic/taxable value</li>
+                                <li>Validity: Quotation is valid only for 30 days</li>
+                                <li>Payment: 50% Advance with PO, 50% before dispatch</li>
+                                <li>Responsibility: Company is not responsible for any damage during transportation.</li>
+                            </ul>
+                            <i style="font-size: 0.8rem;">Subject To Rajkot Jurisdiction</i>
+                        </div>
+                        <div>
+                            <div class="text-bold" style="text-decoration: underline;">BANK DETAILS:</div>
+                            <div style="color: #444; margin-top: 5px;">
+                                NAME: NEXTN EQUIPMENTS<br>
+                                BANK NAME: UNION BANK OF INDIA<br>
+                                ACCOUNT NUMBER: 019125010000001<br>
+                                IFSC CODE: UBIN0901911<br>
+                                ACCOUNT TYPE: CURRENT ACCOUNT<br>
+                                BRANCH NAME: RAJKOT BRANCH
+                            </div>
+                        </div>
+                    </div>
+                    <div style="text-align: right; margin-top: 30px; font-weight: bold; margin-bottom: 20px;">
+                        Thanking you For,<br>Nextn Equipments
+                    </div>
+                `;
+            }
+
+            // Build Page Container
+            printAreaHtml += `
+                <div class="preview-page ${pageBreakClass}">
+                    <div class="header">
+                        <div style="flex: 1;">
+                            ${logoHtml}
+                            <div class="text-bold">${cName}</div>
+                            <div>${cPerson}</div>
+                            <div style="white-space: pre-wrap; font-size: 0.9rem; line-height: 1.5; margin: 8px 0; max-width: 300px; word-wrap: break-word;">${cAddress}</div>
+                            ${cPhone ? `<div style="font-size: 0.9rem;">Cell: <span>${cPhone}</span></div>` : ''}
+                            ${cGst ? `<div style="font-size: 0.9rem; margin-top: 5px;">GSTIN: <span class="text-bold">${cGst}</span></div>` : ''}
+                        </div>
+                        <div class="doc-title" style="flex: 1;">
+                            <h2>QUOTATION</h2>
+                            <div style="margin-top: 5px; font-size: 0.9rem;">Date: <span>${dateStr}</span></div>
+                            <div style="font-size: 0.9rem;">Ref: <span class="text-bold">${refStr}</span></div>
+                            <br>
+                            <h4 style="color: #0056b3; margin: 0 0 5px 0;">NEXTN EQUIPMENTS</h4>
+                            <div style="font-size: 0.8rem; text-align: right;">
+                                ADDRESS: C/o. JYOTI CNC AUTOMATION LTD.,<br>
+                                UNIT-2, PLOT: P4, LODHIKA GIDC, METODA, RAJKOT.<br>
+                                CONTACT: +91 99799 77998<br>
+                                <span class="text-bold">GST: 24AAQFN7199D1ZT</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <table class="preview-table">
+                        <thead>
+                            <tr>
+                                <th width="5%">Sr.</th>
+                                <th width="45%">Items Particulars</th>
+                                <th width="15%">Price</th>
+                                <th width="10%">Qty</th>
+                                <th width="25%">Total Amount</th>
+                            </tr>
+                        </thead>
+                        <tbody>${rowsHtml}</tbody>
+                        <tfoot>${tfootHtml}</tfoot>
+                    </table>
+
+                    ${footerGridHtml}
+
+                    <div style="position: absolute; bottom: 0; left: 0; right: 0; text-align: center; font-size: 0.8rem; color: #777;">
+                        Page ${pageIndex + 1} of ${totalPages}
+                    </div>
+                </div>
+            `;
+        });
+
+        document.getElementById('printArea').innerHTML = printAreaHtml;
+    }
+
+    // --- SAVE TO GOOGLE SHEETS FUNCTION (Updated for Backend Sync) ---
+    function saveToGoogleSheets() {
+        const url = document.getElementById('scriptUrl').value;
+        if (!url) {
+            alert("⚠️ Missing Web App URL. Document downloaded but NOT saved to cloud.");
+            return; 
+        }
+        
+        const payload = {
+            id: document.getElementById('refNo').value,
+            date: document.getElementById('dateInput').value,
+            client: document.getElementById('cName').value,
+            phone: document.getElementById('cPhone').value,
+            subtotal: finalSubTotal.toFixed(2),
+            gst: finalGst.toFixed(2),
+            total: finalGrandTotal.toFixed(2)
+        };
+
+        // Uses text/plain to bypass preflight CORS issues in Apps Script
+        fetch(url, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'text/plain;charset=utf-8',
+            },
+            body: JSON.stringify(payload)
+        })
+        .then(response => response.json())
+        .then(data => {
+            console.log("Saved to cloud successfully");
+            fetchLiveID(); // Automatically grab the new ID for the next file
+        })
+        .catch(error => {
+            console.error('Error saving to sheets:', error);
+            alert("Failed to save to Google Sheets database. Check internet connection or Web App deployment.");
+        });
+    }
+
+    // --- SEARCH QUOTATIONS MODULE ---
+    function openSearch() {
+        if(!document.getElementById('scriptUrl').value) {
+            alert("Please paste your Google Apps Script URL in System Settings first!"); return;
+        }
+        document.getElementById('searchModal').style.display = 'flex';
+    }
+    function closeSearch() { document.getElementById('searchModal').style.display = 'none'; }
+    
+    function performSearch() {
+        const url = document.getElementById('scriptUrl').value;
+        const q = document.getElementById('searchInput').value;
+        const resultArea = document.getElementById('searchResultsArea');
+        resultArea.innerHTML = "<i>Searching database...</i>";
+        
+        fetch(url + "?q=" + encodeURIComponent(q))
+            .then(res => res.json())
+            .then(data => {
+                if(data.length === 0) { resultArea.innerHTML = "<p>No quotations found.</p>"; return; }
+                let table = `<table><tr><th>ID</th><th>Date</th><th>Client Name</th><th>Total Amount</th></tr>`;
+                data.forEach(row => {
+                    table += `<tr><td><strong>${row.id}</strong></td><td>${new Date(row.date).toLocaleDateString()}</td><td>${row.client}</td><td>₹${parseFloat(row.total).toLocaleString('en-IN')}</td></tr>`;
+                });
+                table += `</table>`;
+                resultArea.innerHTML = table;
+            })
+            .catch(err => { resultArea.innerHTML = "<p style='color:red;'>Search failed. Ensure Web App is accessible.</p>"; });
+    }
+
+    // --- GENERATE HIGH QUALITY MULTI-PAGE PDF WITH NO CUTOFFS ---
+    function generatePDF() {
+        // BLANK PDF PROTECTION
+        if (finalGrandTotal === 0 && document.getElementById('cName').value.trim() === '') {
+            alert("⚠️ Warning: Cannot export an empty quotation. Please add a client or items.");
+            return;
+        }
+
+        const btn = document.getElementById('pdfBtn');
+        btn.innerText = "Processing PDF...";
+        btn.style.opacity = "0.7";
+
+        const element = document.getElementById('printArea');
+        const filename = document.getElementById('refNo').value + '.pdf';
+        
+        // Lock internal page width to exact printable A4 zone (180mm inside 15mm margins)
+        const pages = element.querySelectorAll('.preview-page');
+        pages.forEach(p => {
+            p.style.width = '180mm';
+            p.style.height = '267mm'; // A4 Height minus margins
+            p.style.minHeight = '267mm';
+            p.style.padding = '0';
+            p.style.boxShadow = 'none';
+        });
+
+        const opt = {
+            margin:       15, // Absolute CSS margins
+            filename:     filename,
+            image:        { type: 'jpeg', quality: 1.0 },
+            html2canvas:  { scale: 4, useCORS: true, letterRendering: true }, 
+            jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' },
+            pagebreak:    { mode: ['css'] } // Pure CSS page-breaks logic handles chunks flawlessly
+        };
+
+        html2pdf().set(opt).from(element).save().then(() => {
+            saveToGoogleSheets(); // This now automatically fetches the NEXT ID after saving
+            updatePreview(); // Re-render to restore shadows/UI styling
+            
+            btn.innerText = "⬇ Download PDF & Save to Sheets";
+            btn.style.opacity = "1";
+        });
+    }
+
+    // Startup Tasks
+    addRow();
+    updatePreview();
+</script>
+</body>
+</html>
